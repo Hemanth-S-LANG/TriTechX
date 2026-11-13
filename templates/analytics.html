@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Analytics Dashboard – CampusNet{% endblock %}
+
+{% block body %}
+<div class="container-fluid px-4 py-4">
+
+  <div class="page-header fade-in">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-bar-chart-line" style="font-size:2rem; opacity:.85;"></i>
+      <div>
+        <h1>Analytics Dashboard</h1>
+        <p>Zone-wise stats, category distributions and resolution metrics.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== OVERALL STATS ===== -->
+  <div class="row g-3 mb-4 fade-in">
+    {% set o = analytics.overall %}
+    <div class="col-6 col-lg-3">
+      <div class="stat-card indigo">
+        <div class="stat-value" data-count="{{ o.total or 0 }}">{{ o.total or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-clipboard2 me-1"></i>Total Complaints</div>
+        <i class="bi bi-clipboard2 stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card emerald">
+        <div class="stat-value" data-count="{{ o.resolved or 0 }}">{{ o.resolved or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-check2-circle me-1"></i>Resolved</div>
+        <i class="bi bi-check2-circle stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card orange">
+        <div class="stat-value" data-count="{{ o.unresolved or 0 }}">{{ o.unresolved or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-hourglass me-1"></i>Unresolved</div>
+        <i class="bi bi-hourglass stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card teal">
+        <div class="stat-value" data-count="{{ o.in_progress or 0 }}">{{ o.in_progress or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-arrow-clockwise me-1"></i>In Progress</div>
+        <i class="bi bi-arrow-clockwise stat-icon"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CHARTS ROW ===== -->
+  <div class="row g-4">
+
+    <!-- Zone-wise bar chart -->
+    <div class="col-lg-6 fade-in">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="bi bi-bar-chart-line me-2" style="color:var(--primary);"></i>
+          Zone-wise Complaint Statistics
+        </div>
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="zoneChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category pie chart -->
+    <div class="col-lg-6 fade-in">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="bi bi-pie-chart me-2" style="color:var(--teal);"></i>
+          Category-wise Distribution
+        </div>
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resolved vs Unresolved doughnut -->
+    <div class="col-lg-6 fade-in">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="bi bi-check2-square me-2" style="color:var(--emerald);"></i>
+          Resolved vs Unresolved
+        </div>
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="statusChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zone detailed table -->
+    <div class="col-lg-6 fade-in">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="bi bi-table me-2" style="color:var(--violet);"></i>
+          Zone-wise Details
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Zone</th>
+                  <th class="text-center">Total</th>
+                  <th class="text-center">Resolved</th>
+                  <th class="text-center">Pending</th>
+                  <th class="text-center">Resolution %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for z in analytics.zone_stats %}
+                {% set pending = z.total - z.resolved %}
+                {% set pct = ((z.resolved / z.total * 100) | round(1)) if z.total > 0 else 0 %}
+                <tr>
+                  <td class="fw-600">{{ zone_names.get(z.zone_code, z.zone_code) }}</td>
+                  <td class="text-center">{{ z.total }}</td>
+                  <td class="text-center"><span style="color:var(--emerald);font-weight:600;">{{ z.resolved }}</span></td>
+                  <td class="text-center"><span style="color:var(--amber);font-weight:600;">{{ pending }}</span></td>
+                  <td class="text-center">
+                    <span class="badge {{ 'badge-available' if pct >= 70 else 'badge-busy' }}">
+                      {{ pct }}%
+                    </span>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Count-up stats
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-count]').forEach(el =>
+    animateCountUp(el, parseInt(el.dataset.count, 10) || 0)
+  );
+});
+
+// Prepare chart data from backend
+const zoneStats = {{ analytics.zone_stats | tojson }};
+const catStats  = {{ analytics.category_stats | tojson }};
+const overall   = {{ analytics.overall | tojson }};
+
+// NO RED color rule enforced below
+const zoneColors = {
+  'HOSTEL':  'rgba(79,70,229, 0.8)',  // indigo
+  'LAB':     'rgba(13,148,136, 0.8)', // teal
+  'ADMIN':   'rgba(124,58,237, 0.8)', // violet
+  'LIB':     'rgba(217,119,6, 0.8)',  // amber
+  'CANTEEN': 'rgba(5,150,105, 0.8)',  // emerald
+  'SPORTS':  'rgba(234,88,12, 0.8)',  // orange (instead of red)
+  'CENTRAL': 'rgba(71,85,105, 0.8)',  // slate
+};
+
+const catColors = {
+  'Connectivity':  'rgba(59,130,246, 0.8)',  // blue
+  'Hardware':      'rgba(71,85,105, 0.8)',   // slate
+  'Configuration': 'rgba(13,148,136, 0.8)',  // teal
+  'Security':      'rgba(124,58,237, 0.8)',  // violet
+  'Unknown':       'rgba(148,163,184, 0.8)', // slate-light
+};
+
+// === ZONE BAR CHART ===
+const zoneCtx = document.getElementById('zoneChart')?.getContext('2d');
+if (zoneCtx && zoneStats.length) {
+  const zoneLabels = zoneStats.map(z => z.zone_code);
+  const zoneTotals = zoneStats.map(z => z.total);
+  const zoneResolved = zoneStats.map(z => z.resolved);
+  const zonePending = zoneStats.map(z => z.total - z.resolved);
+
+  new Chart(zoneCtx, {
+    type: 'bar',
+    data: {
+      labels: zoneLabels,
+      datasets: [
+        {
+          label: 'Resolved',
+          data: zoneResolved,
+          backgroundColor: 'rgba(5,150,105, 0.8)',
+          borderColor: 'rgba(5,150,105, 1)',
+          borderWidth: 1,
+        },
+        {
+          label: 'Pending',
+          data: zonePending,
+          backgroundColor: 'rgba(217,119,6, 0.8)',
+          borderColor: 'rgba(217,119,6, 1)',
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+      },
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+    },
+  });
+}
+
+// === CATEGORY PIE CHART ===
+const catCtx = document.getElementById('categoryChart')?.getContext('2d');
+if (catCtx && catStats.length) {
+  const catLabels = catStats.map(c => c.category);
+  const catData   = catStats.map(c => c.total);
+  const catBgColors = catLabels.map(cat => catColors[cat] || 'rgba(100,100,100,0.8)');
+
+  new Chart(catCtx, {
+    type: 'doughnut',
+    data: {
+      labels: catLabels,
+      datasets: [{
+        data: catData,
+        backgroundColor: catBgColors,
+        borderWidth: 2,
+        borderColor: '#fff',
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'right' },
+        tooltip: { callbacks: {
+          label: ctx => ` ${ctx.label}: ${ctx.parsed} (${((ctx.parsed/overall.total)*100).toFixed(1)}%)`
+        }},
+      },
+    },
+  });
+}
+
+// === RESOLVED VS UNRESOLVED DOUGHNUT ===
+const statusCtx = document.getElementById('statusChart')?.getContext('2d');
+if (statusCtx && overall.total > 0) {
+  new Chart(statusCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Resolved', 'Unresolved'],
+      datasets: [{
+        data: [overall.resolved || 0, overall.unresolved || 0],
+        backgroundColor: [
+          'rgba(5,150,105, 0.8)',   // emerald
+          'rgba(234,88,12, 0.8)',   // orange (instead of red)
+        ],
+        borderWidth: 3,
+        borderColor: '#fff',
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { callbacks: {
+          label: ctx => ` ${ctx.label}: ${ctx.parsed} (${((ctx.parsed/overall.total)*100).toFixed(1)}%)`
+        }},
+      },
+    },
+  });
+}
+</script>
+{% endblock %}

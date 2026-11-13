@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard – CampusNet{% endblock %}
+
+{% block body %}
+<div class="container-fluid px-4 py-4">
+
+  <div class="page-header fade-in">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-shield-check" style="font-size:2rem; opacity:.85;"></i>
+      <div>
+        <h1>Network Administrator Dashboard</h1>
+        <p>Select an administrator to view assigned complaints and manage their status.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- ===== LEFT: Admin selector ===== -->
+    <div class="col-md-3 fade-in">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-people me-2" style="color:var(--primary);"></i>Administrators</div>
+        <div class="card-body p-2">
+          {% set zone_labels = {
+            'HOSTEL':'Hostels','LAB':'Laboratories','ADMIN':'Admin Block',
+            'LIB':'Library','CANTEEN':'Canteen','SPORTS':'Sports Complex','CENTRAL':'Central'
+          } %}
+          {% set current_zone = '' %}
+          {% for a in admins %}
+            {% if a.zone_code != current_zone %}
+              {% set current_zone = a.zone_code %}
+              <div class="sidebar-title px-2 pt-2">{{ zone_labels.get(a.zone_code, a.zone_code) }}</div>
+            {% endif %}
+            <a href="{{ url_for('admin_dashboard') }}?admin_id={{ a.id }}"
+               class="d-flex align-items-center justify-content-between p-2 rounded mb-1 text-decoration-none
+                      {{ 'active' if selected_id == a.id else '' }}"
+               style="transition: background .15s; {% if selected_id == a.id %}background:rgba(79,70,229,.1);{% endif %}">
+              <div>
+                <div class="fw-600" style="font-size:.85rem; color:var(--text);">{{ a.name }}</div>
+                <div class="text-muted" style="font-size:.72rem;">
+                  {{ 'Backup' if a.is_backup else 'Primary' }}
+                </div>
+              </div>
+              <span class="badge {{ 'badge-available' if a.availability == 'Available' else 'badge-busy' }}"
+                    style="font-size:.65rem;">
+                {{ a.availability }}
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RIGHT: Selected admin panel ===== -->
+    <div class="col-md-9 fade-in">
+
+      {% if not selected_admin %}
+      <div class="empty-state card py-5">
+        <i class="bi bi-person-gear d-block" style="font-size:3.5rem; color:var(--slate-light);"></i>
+        <p class="fw-600 mt-2">Select an administrator from the left panel</p>
+        <p class="text-muted small">Their assigned complaints will appear here.</p>
+      </div>
+
+      {% else %}
+      <!-- Admin info header -->
+      <div class="card mb-3">
+        <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div class="d-flex align-items-center gap-3">
+            <div style="width:52px;height:52px;border-radius:50%;
+                        background:linear-gradient(135deg,var(--primary),var(--teal));
+                        display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;font-weight:700;">
+              {{ selected_admin.name[0] }}
+            </div>
+            <div>
+              <div class="fw-700 fs-6">{{ selected_admin.name }}</div>
+              <div class="text-muted small">
+                {{ 'Primary' if not selected_admin.is_backup else 'Backup' }} Admin &nbsp;·&nbsp;
+                Zone: {{ zone_labels.get(selected_admin.zone_code, selected_admin.zone_code) }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Availability toggle -->
+          <div class="d-flex align-items-center gap-3">
+            <span id="availBadge"
+                  class="badge {{ 'badge-available' if selected_admin.availability == 'Available' else 'badge-busy' }}">
+              <i class="bi {{ 'bi-circle-fill' if selected_admin.availability == 'Available' else 'bi-dash-circle-fill' }} me-1"
+                 style="font-size:.6rem;"></i>
+              {{ selected_admin.availability }}
+            </span>
+
+            <div class="form-check form-switch toggle-switch mb-0 d-flex align-items-center gap-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="availToggle"
+                     {{ 'checked' if selected_admin.availability == 'Available' else '' }}>
+              <label class="form-check-label small text-muted" for="availToggle">Available</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Complaints table -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <span>
+            <i class="bi bi-clipboard2-check me-2" style="color:var(--primary);"></i>
+            Assigned Complaints
+            <span class="badge bg-secondary ms-1">{{ complaints|length }}</span>
+          </span>
+          <div class="search-bar">
+            <i class="bi bi-search search-icon"></i>
+            <input type="text" class="form-control form-control-sm" id="adminSearch"
+                   placeholder="Search complaints…" style="min-width:200px;">
+          </div>
+        </div>
+        <div class="card-body p-0">
+          {% if complaints %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0" id="adminTable">
+              <thead>
+                <tr>
+                  <th>Complaint ID</th>
+                  <th>User</th>
+                  <th>Location</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th>Update Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in complaints %}
+                <tr id="row-{{ c.complaint_id }}">
+                  <td><span class="complaint-id">{{ c.complaint_id }}</span></td>
+                  <td>
+                    <div class="fw-600" style="font-size:.85rem;">{{ c.user_name }}</div>
+                    <div class="text-muted" style="font-size:.72rem;">{{ c.usn_or_faculty_id }}</div>
+                  </td>
+                  <td><code>{{ c.location_identifier }}</code>
+                    <div class="text-muted" style="font-size:.72rem;">Floor {{ c.floor }}</div>
+                  </td>
+                  <td><span class="badge badge-cat-{{ c.category|lower }}">{{ c.category }}</span></td>
+                  <td><span class="badge badge-priority-{{ c.priority|lower }}">{{ c.priority }}</span></td>
+                  <td>
+                    <span class="badge badge-status-{{ c.status|lower|replace(' ','-') }}"
+                          id="status-{{ c.complaint_id }}">{{ c.status }}</span>
+                  </td>
+                  <td><span class="text-muted small">{{ c.created_at }}</span></td>
+                  <td>
+                    <select class="form-select form-select-sm status-dropdown"
+                            data-cid="{{ c.complaint_id }}"
+                            data-admin="{{ selected_admin.id }}"
+                            style="min-width:130px;">
+                      {% for s in ['Pending','Assigned','In Progress','Resolved'] %}
+                      <option value="{{ s }}" {{ 'selected' if c.status == s else '' }}>{{ s }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="empty-state py-4">
+            <i class="bi bi-inbox d-block"></i>
+            <p class="fw-600">No complaints assigned to {{ selected_admin.name }}</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ==== Availability toggle ====
+const availToggle = document.getElementById('availToggle');
+if (availToggle) {
+  availToggle.addEventListener('change', async function() {
+    const adminId = {{ selected_admin.id if selected_admin else 'null' }};
+    const newAvail = this.checked ? 'Available' : 'Busy';
+
+    try {
+      const data = await apiFetch('/api/admin/toggle', {
+        body: JSON.stringify({ admin_id: adminId, availability: newAvail })
+      });
+
+      const badge = document.getElementById('availBadge');
+      if (data.success) {
+        badge.className = 'badge ' + (newAvail === 'Available' ? 'badge-available' : 'badge-busy');
+        badge.innerHTML = `<i class="bi ${newAvail === 'Available' ? 'bi-circle-fill' : 'bi-dash-circle-fill'} me-1" style="font-size:.6rem;"></i>${newAvail}`;
+        showToast(`${data.admin.name} marked as ${newAvail}.`, 'success');
+        if (data.auto_assigned) {
+          showToast(`Auto-assigned waiting complaint ${data.auto_assigned.complaint_id}.`, 'info', 6000);
+          setTimeout(() => location.reload(), 2000);
+        }
+      }
+    } catch(e) {
+      showToast('Failed to update availability: ' + e.message, 'error');
+      this.checked = !this.checked;
+    }
+  });
+}
+
+// ==== Status dropdowns ====
+document.querySelectorAll('.status-dropdown').forEach(sel => {
+  sel.addEventListener('change', async function() {
+    const cid     = this.dataset.cid;
+    const adminId = parseInt(this.dataset.admin);
+    const status  = this.value;
+
+    const confirmed = await new Promise(resolve => {
+      resolve(confirm(`Change complaint ${cid} to "${status}"?`));
+    });
+    if (!confirmed) {
+      // Revert
+      location.reload();
+      return;
+    }
+
+    try {
+      const data = await apiFetch('/api/complaint/status', {
+        body: JSON.stringify({ complaint_id: cid, status, admin_id: adminId })
+      });
+
+      if (data.success) {
+        const badge = document.getElementById('status-' + cid);
+        if (badge) {
+          const key = status.toLowerCase().replace(/ /g, '-');
+          badge.className = `badge badge-status-${key}`;
+          badge.textContent = status;
+        }
+        showToast(`Complaint ${cid} updated to "${status}".`, 'success');
+        if (data.auto_assigned) {
+          showToast(`Auto-assigned next complaint from queue: ${data.auto_assigned.complaint_id}`, 'info', 6000);
+          setTimeout(() => location.reload(), 2500);
+        }
+      }
+    } catch(e) {
+      showToast('Update failed: ' + e.message, 'error');
+    }
+  });
+});
+
+// ==== Search ====
+document.getElementById('adminSearch')?.addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#adminTable tbody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+</script>
+{% endblock %}

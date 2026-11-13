@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}User Dashboard – CampusNet{% endblock %}
+
+{% block body %}
+<div class="container py-4">
+
+  <!-- Page header -->
+  <div class="page-header fade-in">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-speedometer2" style="font-size:2rem; opacity:.85;"></i>
+      <div>
+        <h1>User Dashboard</h1>
+        <p>Track your complaints and view system-wide status at a glance.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STAT CARDS ===== -->
+  <div class="row g-3 mb-4 fade-in">
+    <div class="col-6 col-md-3">
+      <div class="stat-card indigo">
+        <div class="stat-value" data-count="{{ stats.total or 0 }}">{{ stats.total or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-clipboard2 me-1"></i>Total</div>
+        <i class="bi bi-clipboard2 stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card amber">
+        <div class="stat-value" data-count="{{ stats.pending or 0 }}">{{ stats.pending or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-hourglass-split me-1"></i>Pending</div>
+        <i class="bi bi-hourglass-split stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card teal">
+        <div class="stat-value" data-count="{{ (stats.assigned or 0) + (stats.in_progress or 0) }}">{{ (stats.assigned or 0) + (stats.in_progress or 0) }}</div>
+        <div class="stat-label"><i class="bi bi-person-check me-1"></i>In Progress</div>
+        <i class="bi bi-person-check stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card emerald">
+        <div class="stat-value" data-count="{{ stats.resolved or 0 }}">{{ stats.resolved or 0 }}</div>
+        <div class="stat-label"><i class="bi bi-check2-circle me-1"></i>Resolved</div>
+        <i class="bi bi-check2-circle stat-icon"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== COMPLAINT TRACKER ===== -->
+  <div class="card mb-4 fade-in">
+    <div class="card-header d-flex align-items-center gap-2">
+      <i class="bi bi-search" style="color:var(--primary);"></i>
+      <span>Track Complaint by ID</span>
+    </div>
+    <div class="card-body p-4">
+      <form method="GET" action="{{ url_for('user_dashboard') }}" class="d-flex gap-2 flex-wrap mb-3">
+        <input type="text" class="form-control" name="complaint_id"
+               value="{{ track_id or '' }}" placeholder="e.g. CMP-20261113-0001"
+               style="font-family:monospace; max-width:300px;">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-search"></i> Track
+        </button>
+        {% if track_id %}
+        <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-primary">
+          <i class="bi bi-x"></i> Clear
+        </a>
+        {% endif %}
+      </form>
+
+      {% if track_err %}
+      <div class="alert d-flex align-items-center gap-2 py-2 mb-0"
+           style="background:rgba(234,88,12,.08); border:1.5px solid rgba(234,88,12,.3); color:var(--orange);">
+        <i class="bi bi-exclamation-triangle-fill"></i> {{ track_err }}
+      </div>
+      {% endif %}
+
+      {% if tracked %}
+      <div class="card mt-2" style="border:2px solid var(--primary);">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2"
+             style="background:rgba(79,70,229,.05);">
+          <span class="complaint-id fs-5">{{ tracked.complaint_id }}</span>
+          <div class="d-flex gap-2">
+            <span class="badge badge-priority-{{ tracked.priority|lower }}">{{ tracked.priority }}</span>
+            <span class="badge badge-status-{{ tracked.status|lower|replace(' ','-') }}">{{ tracked.status }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+
+          <!-- Status stepper -->
+          {% set all_steps = ['Pending', 'Assigned', 'In Progress', 'Resolved'] %}
+          {% set step_icons = ['bi-hourglass-split', 'bi-person-check', 'bi-tools', 'bi-check2-circle'] %}
+          {% set current_idx = all_steps.index(tracked.status) if tracked.status in all_steps else 0 %}
+          <div class="status-stepper mb-4">
+            {% for i in range(all_steps|length) %}
+            <div class="stepper-step {{ 'done' if i < current_idx else ('active' if i == current_idx else '') }}">
+              <div class="stepper-dot">
+                <i class="bi {{ step_icons[i] }}"></i>
+              </div>
+              <div class="stepper-label">{{ all_steps[i] }}</div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <table class="table table-sm mb-0">
+                <tr><td class="text-muted" style="width:40%;">Submitted by</td>
+                    <td class="fw-600">{{ tracked.user_name }} <span class="text-muted small">({{ tracked.usn_or_faculty_id }})</span></td></tr>
+                <tr><td class="text-muted">Location</td>
+                    <td><code>{{ tracked.location_identifier }}</code></td></tr>
+                <tr><td class="text-muted">Zone</td>
+                    <td>{{ tracked.zone_code }}</td></tr>
+                <tr><td class="text-muted">Category</td>
+                    <td><span class="badge badge-cat-{{ tracked.category|lower }}">{{ tracked.category }}</span></td></tr>
+              </table>
+            </div>
+            <div class="col-md-6">
+              <table class="table table-sm mb-0">
+                <tr><td class="text-muted" style="width:40%;">Assigned Admin</td>
+                    <td class="fw-600">{{ tracked.admin_name or '—' }}</td></tr>
+                <tr><td class="text-muted">Created</td>
+                    <td>{{ tracked.created_at }}</td></tr>
+                <tr><td class="text-muted">Last Updated</td>
+                    <td>{{ tracked.updated_at }}</td></tr>
+              </table>
+            </div>
+            <div class="col-12">
+              <div class="p-3 rounded" style="background:var(--bg); border:1px solid var(--border);">
+                <span class="text-muted small fw-600">Description:</span>
+                <p class="mb-0 mt-1">{{ tracked.description }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ===== RECENT COMPLAINTS TABLE ===== -->
+  <div class="card fade-in">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span><i class="bi bi-table me-2" style="color:var(--primary);"></i>Recent Complaints</span>
+      <div class="d-flex gap-2 flex-wrap">
+        <div class="search-bar">
+          <i class="bi bi-search search-icon"></i>
+          <input type="text" class="form-control form-control-sm" id="searchInput"
+                 placeholder="Search…" style="min-width:180px;">
+        </div>
+        <select class="form-select form-select-sm" id="statusFilter" style="width:auto;">
+          <option value="">All Statuses</option>
+          <option>Pending</option><option>Assigned</option>
+          <option>In Progress</option><option>Resolved</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if recent %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="complaintsTable">
+          <thead>
+            <tr>
+              <th>Complaint ID</th>
+              <th>User</th>
+              <th>Location</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Admin</th>
+              <th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in recent %}
+            <tr>
+              <td><span class="complaint-id">{{ c.complaint_id }}</span></td>
+              <td>{{ c.user_name }}</td>
+              <td><code>{{ c.location_identifier }}</code></td>
+              <td><span class="badge badge-cat-{{ c.category|lower }}">{{ c.category }}</span></td>
+              <td><span class="badge badge-priority-{{ c.priority|lower }}">{{ c.priority }}</span></td>
+              <td><span class="badge badge-status-{{ c.status|lower|replace(' ','-') }}">{{ c.status }}</span></td>
+              <td>{{ c.admin_name or '—' }}</td>
+              <td><span class="text-muted small">{{ c.created_at }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-clipboard2-x d-block"></i>
+        <p class="fw-600">No complaints yet</p>
+        <a href="{{ url_for('submit') }}" class="btn btn-primary btn-sm">Submit your first complaint</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Count-up for stat cards
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-count]').forEach(el =>
+    animateCountUp(el, parseInt(el.dataset.count, 10) || 0)
+  );
+});
+
+// Search + status filter
+const searchInput  = document.getElementById('searchInput');
+const statusFilter = document.getElementById('statusFilter');
+const tbody = document.querySelector('#complaintsTable tbody');
+
+function filterTable() {
+  if (!tbody) return;
+  const q   = (searchInput?.value || '').toLowerCase();
+  const st  = (statusFilter?.value || '').toLowerCase();
+  tbody.querySelectorAll('tr').forEach(row => {
+    const text   = row.textContent.toLowerCase();
+    const status = row.querySelectorAll('td')[5]?.textContent.trim().toLowerCase() || '';
+    const show   = text.includes(q) && (!st || status.includes(st));
+    row.style.display = show ? '' : 'none';
+  });
+}
+searchInput?.addEventListener('input', filterTable);
+statusFilter?.addEventListener('change', filterTable);
+</script>
+{% endblock %}

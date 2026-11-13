@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+{% block title %}Submit Complaint – CampusNet{% endblock %}
+
+{% block body %}
+<div class="container py-4" style="max-width:860px;">
+
+  <!-- Page header -->
+  <div class="page-header fade-in">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-plus-circle-fill" style="font-size:2rem; opacity:.85;"></i>
+      <div>
+        <h1>Submit a Complaint</h1>
+        <p>Fill in the details below. The system will validate, classify and route your complaint automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success result card (shown after successful submission) -->
+  {% if result %}
+  <div class="card mb-4 fade-in" style="border:2px solid var(--emerald);">
+    <div class="card-header d-flex align-items-center gap-2" style="background:rgba(5,150,105,.07);">
+      <i class="bi bi-check-circle-fill" style="color:var(--emerald); font-size:1.3rem;"></i>
+      <span class="fw-700" style="color:var(--emerald);">Complaint Submitted Successfully!</span>
+    </div>
+    <div class="card-body">
+      <!-- Complaint ID -->
+      <div class="cid-box mb-4" id="successCid">{{ result.complaint_id }}</div>
+      <div class="text-center mb-4">
+        <button class="btn btn-outline-primary btn-sm" onclick="copyToClipboard('{{ result.complaint_id }}', this)">
+          <i class="bi bi-clipboard"></i> Copy ID
+        </button>
+      </div>
+
+      <div class="row g-3">
+        <!-- Validation -->
+        <div class="col-md-6">
+          <div class="card h-100 p-3">
+            <div class="fw-700 mb-2"><i class="bi bi-cpu me-1" style="color:var(--primary);"></i>Validation</div>
+            <div class="mb-2">
+              <span class="text-muted small">Identifier</span><br>
+              <code class="fs-6 fw-700">{{ result.identifier }}</code>
+            </div>
+            <div class="validation-row ok mb-1">
+              <i class="bi bi-check-circle-fill"></i> DFA: Valid
+            </div>
+            <div class="validation-row ok">
+              <i class="bi bi-check-circle-fill"></i> Regex: Valid
+            </div>
+          </div>
+        </div>
+        <!-- Classification -->
+        <div class="col-md-6">
+          <div class="card h-100 p-3">
+            <div class="fw-700 mb-2"><i class="bi bi-tags me-1" style="color:var(--teal);"></i>Classification</div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <span>Category:</span>
+              <span class="badge badge-cat-{{ result.category|lower }}">{{ result.category }}</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              <span>Priority:</span>
+              <span class="badge badge-priority-{{ result.priority|lower }}">{{ result.priority }}</span>
+            </div>
+            {% if result.classification.matched_keywords %}
+            <div class="mt-2">
+              <span class="text-muted small">Keywords: </span>
+              <span class="text-muted small">{{ result.classification.matched_keywords | join(', ') }}</span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <!-- Routing -->
+        <div class="col-12">
+          <div class="card p-3">
+            <div class="fw-700 mb-2"><i class="bi bi-diagram-3 me-1" style="color:var(--violet);"></i>Routing Result</div>
+            <div class="row g-2">
+              <div class="col-sm-3">
+                <span class="text-muted small d-block">Zone</span>
+                <span class="fw-600">{{ result.zone_name }}</span>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted small d-block">Status</span>
+                <span class="badge badge-status-{{ result.status|lower|replace(' ', '-') }}">{{ result.status }}</span>
+              </div>
+              <div class="col-sm-6">
+                <span class="text-muted small d-block">Assigned Admin</span>
+                <span class="fw-600">
+                  {% if result.assigned_admin %}
+                    <i class="bi bi-person-check me-1" style="color:var(--emerald);"></i>{{ result.assigned_admin }}
+                  {% else %}
+                    <i class="bi bi-clock me-1" style="color:var(--amber);"></i>Waiting in priority queue
+                  {% endif %}
+                </span>
+              </div>
+              <div class="col-12">
+                <span class="text-muted small d-block">Note</span>
+                <span class="small">{{ result.routing_note }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('user_dashboard') }}?complaint_id={{ result.complaint_id }}" class="btn btn-primary btn-sm">
+          <i class="bi bi-search"></i> Track This Complaint
+        </a>
+        <a href="{{ url_for('submit') }}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-plus"></i> Submit Another
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Validation error -->
+  {% if error %}
+  <div class="alert d-flex align-items-center gap-2 mb-4 fade-in"
+       style="background:rgba(234,88,12,.08); border:1.5px solid rgba(234,88,12,.3); color:var(--orange);">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <div><strong>Validation Failed:</strong> {{ error }}</div>
+  </div>
+  {% endif %}
+
+  <!-- ============================================================ FORM -->
+  <div class="card fade-in">
+    <div class="card-header">
+      <i class="bi bi-pencil-square me-2" style="color:var(--primary);"></i>
+      Complaint Details
+    </div>
+    <div class="card-body p-4">
+      <form method="POST" action="{{ url_for('submit') }}" id="complaintForm" novalidate>
+
+        <!-- Row 1: Name + USN -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label" for="name">Full Name <span style="color:var(--orange);">*</span></label>
+            <input type="text" class="form-control" id="name" name="name" required
+                   placeholder="e.g. Riya Sharma" autocomplete="off">
+            <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Please enter your name.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="usn_or_faculty_id">USN / Faculty ID <span style="color:var(--orange);">*</span></label>
+            <input type="text" class="form-control" id="usn_or_faculty_id" name="usn_or_faculty_id" required
+                   placeholder="e.g. 1AM22CS001 or FAC-101" autocomplete="off">
+            <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Please enter your USN or Faculty ID.</div>
+          </div>
+        </div>
+
+        <!-- Row 2: Role -->
+        <div class="mb-3">
+          <label class="form-label">Role <span style="color:var(--orange);">*</span></label>
+          <div class="d-flex gap-4">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="role" id="roleStudent" value="Student" checked>
+              <label class="form-check-label" for="roleStudent"><i class="bi bi-person-badge me-1"></i>Student</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="role" id="roleFaculty" value="Faculty">
+              <label class="form-check-label" for="roleFaculty"><i class="bi bi-person-workspace me-1"></i>Faculty</label>
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-3" style="border-color:var(--border);">
+        <div class="fw-700 mb-3" style="color:var(--primary);">
+          <i class="bi bi-geo-alt me-1"></i> Location Details
+        </div>
+
+        <!-- Row 3: Device + Location + Floor -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label" for="device_type">Device Type <span style="color:var(--orange);">*</span></label>
+            <select class="form-select" id="device_type" name="device_type" required>
+              <option value="">Select…</option>
+              {% for dt in device_types %}
+              <option value="{{ dt }}">{{ dt }}</option>
+              {% endfor %}
+            </select>
+            <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Select a device type.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="location_code">Location Code <span style="color:var(--orange);">*</span></label>
+            <select class="form-select" id="location_code" name="location_code" required>
+              <option value="">Select…</option>
+              {% set loc_names = {'HOST':'Hostels','LAB':'Laboratories','ADM':'Admin Block','LIB':'Library','CANT':'Canteen','SPRT':'Sports Complex'} %}
+              {% for lc in location_codes %}
+              <option value="{{ lc }}">{{ lc }} – {{ loc_names.get(lc, '') }}</option>
+              {% endfor %}
+            </select>
+            <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Select a location code.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="floor">Floor (0–9) <span style="color:var(--orange);">*</span></label>
+            <select class="form-select" id="floor" name="floor" required>
+              <option value="">Select…</option>
+              {% for f in range(10) %}
+              <option value="{{ f }}">Floor {{ f }}</option>
+              {% endfor %}
+            </select>
+            <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Select a floor.</div>
+          </div>
+        </div>
+
+        <!-- Live identifier preview -->
+        <div class="mb-3">
+          <label class="form-label text-muted" style="font-size:.8rem;">
+            <i class="bi bi-eye me-1"></i>Live Identifier Preview
+          </label>
+          <div class="identifier-preview" id="identifierPreview">
+            <span id="previewText" class="text-muted">Fill in device type, location and floor…</span>
+            <span id="previewIcon" class="ms-2 d-none"></span>
+          </div>
+          <div id="validationMsg" class="mt-1" style="font-size:.8rem;"></div>
+        </div>
+
+        <hr class="my-3" style="border-color:var(--border);">
+        <div class="fw-700 mb-3" style="color:var(--primary);">
+          <i class="bi bi-chat-left-text me-1"></i> Complaint Description
+        </div>
+
+        <!-- Description -->
+        <div class="mb-3">
+          <label class="form-label" for="description">Description <span style="color:var(--orange);">*</span></label>
+          <textarea class="form-control" id="description" name="description" rows="4" required
+                    placeholder="Describe the network issue in detail…" minlength="10"></textarea>
+          <div class="invalid-feedback"><i class="bi bi-exclamation-circle me-1"></i>Please describe the issue (min 10 characters).</div>
+          <div class="form-text text-muted" id="charCount">0 / 500 characters</div>
+        </div>
+
+        <!-- Live category preview -->
+        <div class="mb-4">
+          <label class="form-label text-muted" style="font-size:.8rem;">
+            <i class="bi bi-tags me-1"></i>Live Classification Preview
+          </label>
+          <div class="live-category-preview" id="categoryPreview">
+            <span class="text-muted small">Start typing to see category prediction…</span>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" class="btn btn-primary" id="submitBtn">
+            <span id="submitSpinner" class="spinner-border spinner-btn d-none me-1" role="status"></span>
+            <i class="bi bi-send-fill" id="submitIcon"></i> Submit Complaint
+          </button>
+          <button type="reset" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-counterclockwise"></i> Clear
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ===== Live identifier validation ===== */
+const deviceSel   = document.getElementById('device_type');
+const locationSel = document.getElementById('location_code');
+const floorSel    = document.getElementById('floor');
+const preview     = document.getElementById('identifierPreview');
+const previewText = document.getElementById('previewText');
+const previewIcon = document.getElementById('previewIcon');
+const validMsg    = document.getElementById('validationMsg');
+
+let validationTimer = null;
+
+async function updateIdentifierPreview() {
+  const dt  = deviceSel.value;
+  const lc  = locationSel.value;
+  const fl  = floorSel.value;
+
+  if (!dt || !lc || !fl) {
+    previewText.textContent = 'Fill in all three fields…';
+    previewText.className   = 'text-muted';
+    preview.className = 'identifier-preview';
+    previewIcon.classList.add('d-none');
+    validMsg.innerHTML = '';
+    return;
+  }
+
+  const ident = `${dt}-${lc}-${fl}`;
+  previewText.textContent = ident;
+
+  try {
+    const data = await apiFetch('/api/validate', {
+      body: JSON.stringify({ device_type: dt, location_code: lc, floor: fl })
+    });
+
+    if (data.is_valid) {
+      preview.className = 'identifier-preview valid';
+      previewIcon.className = 'ms-2 bi bi-check-circle-fill';
+      previewIcon.style.color = 'var(--emerald)';
+      previewIcon.classList.remove('d-none');
+      validMsg.innerHTML = `
+        <span style="color:var(--emerald);font-weight:600;">
+          <i class="bi bi-check2-circle me-1"></i>Valid identifier
+        </span>
+        <span class="ms-3 text-muted">DFA ✓</span>
+        <span class="ms-2 text-muted">Regex ✓</span>
+        ${data.both_agree ? '<span class="ms-2 badge badge-available">Both agree</span>' : ''}`;
+    } else {
+      preview.className = 'identifier-preview invalid';
+      previewIcon.className = 'ms-2 bi bi-x-circle-fill';
+      previewIcon.style.color = 'var(--orange)';
+      previewIcon.classList.remove('d-none');
+      validMsg.innerHTML = `<span style="color:var(--orange);font-weight:600;">
+        <i class="bi bi-exclamation-triangle me-1"></i>${data.message}</span>`;
+    }
+  } catch(e) {
+    validMsg.innerHTML = `<span style="color:var(--orange);">Validation error</span>`;
+  }
+}
+
+[deviceSel, locationSel, floorSel].forEach(el => {
+  el.addEventListener('change', () => {
+    clearTimeout(validationTimer);
+    validationTimer = setTimeout(updateIdentifierPreview, 200);
+  });
+});
+
+/* ===== Live category classification ===== */
+const descTextarea = document.getElementById('description');
+const catPreview   = document.getElementById('categoryPreview');
+const charCount    = document.getElementById('charCount');
+
+const catColors = {
+  Connectivity:  'var(--primary)',
+  Hardware:      'var(--slate)',
+  Configuration: 'var(--teal)',
+  Security:      'var(--violet)',
+  Unknown:       'var(--slate-light)',
+};
+
+let classifyTimer = null;
+
+async function updateCategoryPreview() {
+  const text = descTextarea.value.trim();
+  charCount.textContent = `${text.length} / 500 characters`;
+  if (text.length < 3) {
+    catPreview.innerHTML = '<span class="text-muted small">Start typing to see category prediction…</span>';
+    return;
+  }
+
+  try {
+    const data = await apiFetch('/api/classify', { body: JSON.stringify({ description: text }) });
+    const color = catColors[data.category] || 'var(--text)';
+    const kw = data.matched_keywords && data.matched_keywords.length
+      ? `<span class="text-muted small ms-2">Matched: <em>${data.matched_keywords.join(', ')}</em></span>` : '';
+
+    catPreview.innerHTML = `
+      <span class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="fw-600" style="color:${color};">
+          <i class="bi bi-tags-fill me-1"></i>${data.category}
+        </span>
+        <span class="badge badge-priority-${(data.priority||'low').toLowerCase()}">${data.priority}</span>
+        ${kw}
+      </span>`;
+  } catch(e) {}
+}
+
+descTextarea.addEventListener('input', () => {
+  clearTimeout(classifyTimer);
+  classifyTimer = setTimeout(updateCategoryPreview, 350);
+});
+
+/* ===== Form validation ===== */
+document.getElementById('complaintForm').addEventListener('submit', function(e) {
+  if (!this.checkValidity()) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.classList.add('was-validated');
+    showToast('Please fill in all required fields.', 'warning');
+    return;
+  }
+  // Show spinner
+  document.getElementById('submitSpinner').classList.remove('d-none');
+  document.getElementById('submitIcon').classList.add('d-none');
+  document.getElementById('submitBtn').disabled = true;
+});
+</script>
+{% endblock %}
